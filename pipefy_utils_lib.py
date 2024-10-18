@@ -81,6 +81,17 @@ class Pipefy(object):
         }
         return self.request(query, headers).get('data', {}).get('card', [])
 
+    def get_all_cards(self, pipe_id, filter="", response_fields=None, headers={}):
+        response_fields = response_fields or 'edges { node { id title assignees { id }' \
+                ' comments { text } comments_count current_phase { name } done due_date ' \
+                'fields { name value } labels { name } phases_history { phase { name } firstTimeIn lastTimeOut } url } }'
+        query = '{ allCards(pipeId: %(pipe_id)s, filter: %(filter)s) { %(response_fields)s } }' % {
+            'pipe_id': json.dumps(pipe_id),
+            'filter': filter,
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('allCards', [])
+
     def phase(self, id, count=10, search={}, response_fields=None, response_card_fields=None, headers={}):
         response_fields = response_fields or 'id name cards_count'
         response_card_fields = response_card_fields or 'edges { node { id title assignees { id name email}' \
@@ -96,6 +107,16 @@ class Pipefy(object):
         }
 
         return self.request(query, headers).get('data', {}).get('phase')
+    
+    def pipe(self, id, response_fields=None, headers={}):
+        response_fields = response_fields or 'id name start_form_fields { label id }' \
+                                                    ' labels { name id } phases { name fields { label id }' \
+                                                    ' cards(first: 5) { edges { node { id, title } } } }'
+        query = '{ pipe (id: %(id)s) { %(response_fields)s } }' % {
+            'id': json.dumps(id),
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('pipe', [])
 
 #####-------------------PIPEFY MUTATIONS-------------------#####
 # https://www.pipefy.com/developers/docs/api/graphql/mutations/
@@ -118,4 +139,98 @@ class Pipefy(object):
             'response_fields': response_fields
         }   
         return self.request(query, headers).get('data', {}).get('moveCardToPhase', {}).get('card')
+
+    def update_phase_field(self, id, label, options, required, editable, response_fields=None, headers={}):
+        response_fields = response_fields or 'phase_field { id label }'
+        query = '''
+            mutation {
+              updatePhaseField(
+                input: {
+                  id: %(id)s
+                  label: %(label)s
+                  options: %(options)s
+                  required: %(required)s
+                  editable: %(editable)s
+                }
+              ) { %(response_fields)s }
+            }
+        ''' % {
+            'id': json.dumps(id),
+            'label': json.dumps(label),
+            'options': self.__prepare_json_list(options),
+            'required': json.dumps(required),
+            'editable': json.dumps(editable),
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('updatePhaseField', {}).get('phase_field')
+    
+    def update_card(self, id, title=None, due_date=None, assignee_ids=[], label_ids=[], response_fields=None, headers={}):
+        response_fields = response_fields or 'card { id title }'
+        query = '''
+            mutation {
+              updateCard(
+                input: {
+                  id: %(id)s
+                  title: %(title)s
+                  due_date: %(due_date)s
+                  assignee_ids: [ %(assignee_ids)s ]
+                  label_ids: [ %(label_ids)s ]
+                }
+              ) { %(response_fields)s }
+            }
+        ''' % {
+            'id': json.dumps(id),
+            'title': json.dumps(title),
+            'due_date': due_date.strftime('%Y-%m-%dT%H:%M:%S+00:00') if due_date else json.dumps(due_date),
+            'assignee_ids': ', '.join([json.dumps(id) for id in assignee_ids]),
+            'label_ids': ', '.join([json.dumps(id) for id in label_ids]),
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('updateCard', {}).get('card')
+    
+    def update_card_field(self, card_id, field_id, new_value, response_fields=None, headers={}):
+        response_fields = response_fields or 'card{ id }'
+        query = '''
+            mutation {
+              updateCardField(
+                input: {
+                  card_id: %(card_id)s
+                  field_id: %(field_id)s
+                  new_value: %(new_value)s
+                }
+              ) { %(response_fields)s }
+            }
+        ''' % {
+            'card_id': json.dumps(card_id),
+            'field_id': json.dumps(field_id),
+            'new_value': json.dumps(new_value),
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('updateCardField', {}).get('card')
+
+    def delete_card(self, id, response_fields=None, headers={}):
+        response_fields = response_fields or 'success'
+        query = 'mutation { deleteCard(input: { id: %(id)s }) { %(response_fields)s }' % {
+            'id': json.dumps(id),
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('deleteCard', {})
+
+    def create_comment(self, card_id, text, response_fields=None, headers={}):
+        response_fields = response_fields or 'comment { id text }'
+        query = '''
+            mutation {
+              createComment(
+                input: {
+                  card_id: %(card_id)s
+                  text: %(text)s
+                }
+              ) { %(response_fields)s }
+            }
+        ''' % {
+            'card_id': json.dumps(card_id),
+            'text': json.dumps(text),
+            'response_fields': response_fields,
+        }
+        return self.request(query, headers).get('data', {}).get('createComment', {}).get('comment')
     
